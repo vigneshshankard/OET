@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  python-ai-engine:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - USE_GPU=false
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=8001
+      - MODEL_CACHE_DIR=/app/models
+      - MAX_MEMORY_GB=8
+      - PRELOAD_MODELS=false
+      - ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:8000"]
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped

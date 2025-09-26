@@ -1,0 +1,137 @@
+/* Progress Page Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.progress-fade-in {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.progress-slide-in {
+  animation: slideIn 0.5s ease-out;
+}
+
+.progress-bounce-in {
+  animation: bounceIn 0.8s ease-out;
+}
+
+.progress-pulse {
+  animation: pulse 2s infinite;
+}
+
+/* Staggered animations */
+.progress-stagger-1 {
+  animation-delay: 0.1s;
+}
+
+.progress-stagger-2 {
+  animation-delay: 0.2s;
+}
+
+.progress-stagger-3 {
+  animation-delay: 0.3s;
+}
+
+.progress-stagger-4 {
+  animation-delay: 0.4s;
+}
+
+/* Custom hover effects */
+.progress-hover-lift {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Progress bar animations */
+.progress-bar-fill {
+  transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Gradient backgrounds */
+.progress-gradient-teal {
+  background: linear-gradient(135deg, #008080 0%, #00A0A0 100%);
+}
+
+.progress-gradient-orange {
+  background: linear-gradient(135deg, #FF8C00 0%, #FFA500 100%);
+}
+
+.progress-gradient-green {
+  background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
+}
+
+.progress-gradient-purple {
+  background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+}
+
+/* Glass morphism effect */
+.progress-glass {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Shimmer effect for loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.progress-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}

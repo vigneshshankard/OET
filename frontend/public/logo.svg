@@ -1,0 +1,6 @@
+<svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="10" width="40" height="40" rx="8" fill="#0ea5e9"/>
+  <path d="M20 25h20v10H20z" fill="white"/>
+  <circle cx="30" cy="30" r="3" fill="#0ea5e9"/>
+  <text x="65" y="35" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#1e293b">OET Praxis</text>
+</svg>

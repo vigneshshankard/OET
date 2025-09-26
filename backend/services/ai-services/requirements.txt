@@ -1,0 +1,15 @@
+# Python Requirements for AI Services
+# Speech-to-Text
+faster-whisper==0.10.0
+
+# Text-to-Speech  
+TTS==0.21.0
+
+# Audio processing
+librosa==0.10.1
+soundfile==0.12.1
+
+# Utility packages
+numpy==1.24.3
+torch==2.0.1
+torchaudio==2.0.2

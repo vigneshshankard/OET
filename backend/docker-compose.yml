@@ -1,0 +1,217 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: oet-postgres
+    environment:
+      POSTGRES_DB: oet_praxis_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - oet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: oet-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - oet-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # API Gateway (FastAPI)
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: oet-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/oet_praxis_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production-256-bit-key
+      - NODE_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oet-network
+    volumes:
+      - ./gateway:/app
+      - /app/node_modules
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # User Service (Node.js)
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    container_name: oet-user-service
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/oet_praxis_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production-256-bit-key
+      - NODE_ENV=development
+      - SERVICE_PORT=3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oet-network
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+
+  # Session Service (Node.js)
+  session-service:
+    build:
+      context: .
+      dockerfile: services/session-service/Dockerfile
+    container_name: oet-session-service
+    ports:
+      - "3002:3002"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/oet_praxis_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production-256-bit-key
+      - NODE_ENV=development
+      - SERVICE_PORT=3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oet-network
+    volumes:
+      - ./services/session-service:/app
+      - /app/node_modules
+
+  # Content Service (Node.js)
+  content-service:
+    build:
+      context: .
+      dockerfile: services/content-service/Dockerfile
+    container_name: oet-content-service
+    ports:
+      - "3003:3003"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/oet_praxis_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production-256-bit-key
+      - NODE_ENV=development
+      - SERVICE_PORT=3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oet-network
+    volumes:
+      - ./services/content-service:/app
+      - /app/node_modules
+
+  # Billing Service (Node.js)
+  billing-service:
+    build:
+      context: .
+      dockerfile: services/billing-service/Dockerfile
+    container_name: oet-billing-service
+    ports:
+      - "3004:3004"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/oet_praxis_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production-256-bit-key
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - NODE_ENV=development
+      - SERVICE_PORT=3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oet-network
+    volumes:
+      - ./services/billing-service:/app
+      - /app/node_modules
+
+  # WebRTC Server (Node.js)
+  webrtc-server:
+    build:
+      context: .
+      dockerfile: services/webrtc-server/Dockerfile
+    container_name: oet-webrtc-server
+    ports:
+      - "3005:3005"
+    environment:
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - NODE_ENV=development
+      - SERVICE_PORT=3005
+    networks:
+      - oet-network
+    volumes:
+      - ./services/webrtc-server:/app
+      - /app/node_modules
+
+  # AI Services (Python)
+  ai-services:
+    build:
+      context: .
+      dockerfile: ai-services/Dockerfile
+    container_name: oet-ai-services
+    ports:
+      - "8001:8001"
+    environment:
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/oet_praxis_dev
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oet-network
+    volumes:
+      - ./ai-services:/app
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+networks:
+  oet-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

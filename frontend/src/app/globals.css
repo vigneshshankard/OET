@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Healthcare color palette implementation */
+    --background: 0 0% 97%; /* Clinical off-white #F8F8F8 */
+    --foreground: 210 11% 24%; /* Dark gray #36454F */
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 11% 24%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 11% 24%;
+
+    --primary: 180 100% 25%; /* Healthcare teal #008080 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 32 100% 50%; /* Orange accent #FF8C00 */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 32 100% 50%; /* Orange accent */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 63% 54%; /* Status danger #DC3545 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 180 100% 25%; /* Teal ring */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Healthcare professional styles */
+.healthcare-gradient {
+  background: linear-gradient(135deg, #008080 0%, #20b2aa 100%);
+}
+
+.medical-card {
+  @apply bg-card border border-border rounded-lg shadow-sm;
+  background-color: #F8F8F8;
+}
+
+.professional-text {
+  @apply font-medium leading-relaxed;
+  color: #36454F;
+}
+
+/* Status indicator styles */
+.status-success {
+  color: #28A745;
+}
+
+.status-warning {
+  color: #FFC107;
+}
+
+.status-danger {
+  color: #DC3545;
+}
+
+/* Clinical theme classes */
+.clinical-bg {
+  background-color: #F8F8F8;
+}
+
+.clinical-text {
+  color: #36454F;
+}
+
+.clinical-navy {
+  color: #1A237E;
+}
+
+.accent-orange {
+  color: #FF8C00;
+}
+
+.primary-teal {
+  color: #008080;
+}
+
+/* Custom scrollbar for better UX */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground));
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
