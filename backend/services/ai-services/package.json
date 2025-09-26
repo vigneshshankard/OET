@@ -28,9 +28,8 @@
     "natural": "^6.8.0",
     "compromise": "^14.10.0",
     "sentiment": "^5.0.2",
-    "profanity-check": "^1.0.3",
-    "validator": "^13.11.0",
-    "crypto": "^1.0.1"
+    "bad-words": "^3.0.4",
+    "validator": "^13.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.8.9",

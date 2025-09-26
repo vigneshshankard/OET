@@ -10,6 +10,7 @@ import SelectField from "@/components/auth/select-field"
 import Link from "next/link"
 import { apiRequest, setAuthToken } from "@/lib/api-utils"
 import { config } from "@/config/app"
+import { User } from "@/types"
 
 const HEALTHCARE_PROFESSIONS = [
   { value: "doctor", label: "Doctor" },
@@ -138,7 +139,7 @@ export default function RegisterPage() {
       const data = await apiRequest<{
         accessToken: string
         refreshToken: string
-        user: any
+        user: User
       }>('/v1/auth/register', {
         method: 'POST',
         body: JSON.stringify({

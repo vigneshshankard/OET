@@ -1,9 +1,40 @@
 // API response types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean
-  data?: T
+  data: T
   message?: string
-  errors?: string[]
+  error?: ApiError
+  metadata?: ResponseMetadata
+}
+
+export interface ApiError {
+  code: string
+  message: string
+  details?: Record<string, unknown>
+  stack?: string // only in development
+}
+
+export interface ResponseMetadata {
+  timestamp: string
+  request_id: string
+  processing_time: number
+  rate_limit?: RateLimitInfo
+  pagination?: PaginationInfo
+}
+
+export interface RateLimitInfo {
+  limit: number
+  remaining: number
+  reset_time: string
+}
+
+export interface PaginationInfo {
+  page: number
+  per_page: number
+  total_pages: number
+  total_items: number
+  has_next: boolean
+  has_previous: boolean
 }
 
 export interface PaginatedResponse<T> {
@@ -16,7 +47,7 @@ export interface PaginatedResponse<T> {
   }
 }
 
-export interface ApiError {
+export interface ValidationError {
   message: string
   code?: string
   field?: string

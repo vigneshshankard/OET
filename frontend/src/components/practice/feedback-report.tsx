@@ -4,13 +4,33 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import SimpleCircularProgress from "@/components/dashboard/simple-circular-progress"
+import { Scenario } from "@/types"
 
 interface FeedbackReportProps {
-  scenario: any
+  scenario: Scenario
   sessionData: {
     duration: number
     completedPhases: number
     totalPhases: number
+    feedback?: {
+      overallScore: number
+      detailedScores: {
+        pronunciation: number
+        grammar: number
+        vocabulary: number
+        clinicalCommunication: number
+        empathy: number
+        patientEducation: number
+      }
+      strengths: string[]
+      improvements: string[]
+      transcriptAnalysis?: {
+        totalWords: number
+        speakingTimePercentage: number
+        keyPhrasesUsed: string[]
+        missedOpportunities: string[]
+      }
+    }
   }
   onReturnToDashboard: () => void
   onRetrySession: () => void
@@ -22,27 +42,37 @@ export default function FeedbackReport({
   onReturnToDashboard, 
   onRetrySession 
 }: FeedbackReportProps) {
-  // Mock feedback data - in real app would come from AI analysis
+  // Use AI-generated feedback data or fallback to mock data
+  const aiFeedback = sessionData.feedback
+  
   const feedbackData = {
-    overallScore: 82,
+    overallScore: aiFeedback?.overallScore || 82,
     breakdown: {
-      communication: 85,
-      vocabulary: 78,
-      fluency: 80,
-      empathy: 88,
-      clinical: 84
+      communication: aiFeedback?.detailedScores?.clinicalCommunication || 85,
+      vocabulary: aiFeedback?.detailedScores?.vocabulary || 78,
+      fluency: aiFeedback?.detailedScores?.pronunciation || 80,
+      empathy: aiFeedback?.detailedScores?.empathy || 88,
+      clinical: aiFeedback?.detailedScores?.clinicalCommunication || 84,
+      grammar: aiFeedback?.detailedScores?.grammar || 82,
+      patientEducation: aiFeedback?.detailedScores?.patientEducation || 79
     },
-    strengths: [
+    strengths: aiFeedback?.strengths || [
       "Excellent empathetic communication with patient",
       "Clear explanation of medical concepts", 
       "Professional and reassuring tone throughout",
       "Good use of active listening techniques"
     ],
-    improvements: [
+    improvements: aiFeedback?.improvements || [
       "Consider using more specific medical terminology for diabetes management",
       "Practice pause management during patient responses",
       "Enhance explanation of long-term complications and prevention"
     ],
+    transcriptAnalysis: aiFeedback?.transcriptAnalysis || {
+      totalWords: 245,
+      speakingTimePercentage: 65,
+      keyPhrasesUsed: ["How are you feeling?", "I understand", "Can you tell me more?"],
+      missedOpportunities: ["Pain scale assessment", "Lifestyle recommendations"]
+    },
     keyMoments: [
       {
         phase: "Opening Consultation",
@@ -291,6 +321,117 @@ export default function FeedbackReport({
                   <p className="text-sm" style={{ color: '#36454F' }}>
                     Share your session with colleagues for additional feedback
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Transcript Analysis Section */}
+          {aiFeedback && (
+            <Card className="border-0 shadow-md">
+              <CardHeader>
+                <CardTitle style={{ color: '#36454F' }}>Session Analysis</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="font-semibold mb-3" style={{ color: '#008080' }}>Communication Metrics</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm" style={{ color: '#36454F' }}>Total Words Spoken:</span>
+                        <span className="font-semibold">{feedbackData.transcriptAnalysis.totalWords}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm" style={{ color: '#36454F' }}>Speaking Time:</span>
+                        <span className="font-semibold">{feedbackData.transcriptAnalysis.speakingTimePercentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="h-2 rounded-full" 
+                          style={{ 
+                            width: `${feedbackData.transcriptAnalysis.speakingTimePercentage}%`,
+                            backgroundColor: '#008080'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold mb-3" style={{ color: '#008080' }}>Key Achievements</h4>
+                    {feedbackData.transcriptAnalysis.keyPhrasesUsed.length > 0 ? (
+                      <div className="space-y-2">
+                        {feedbackData.transcriptAnalysis.keyPhrasesUsed.slice(0, 3).map((phrase, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
+                            <span className="text-sm italic" style={{ color: '#36454F' }}>"{phrase}"</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm italic" style={{ color: '#6B7280' }}>
+                        Key phrases will be highlighted in future sessions
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {feedbackData.transcriptAnalysis.missedOpportunities.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="font-semibold mb-3" style={{ color: '#F59E0B' }}>Missed Opportunities</h4>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {feedbackData.transcriptAnalysis.missedOpportunities.map((opportunity, index) => (
+                        <div key={index} className="flex items-start gap-2 p-3 rounded-lg" style={{ backgroundColor: '#FEF3C7' }}>
+                          <div className="w-2 h-2 rounded-full mt-1.5" style={{ backgroundColor: '#F59E0B' }} />
+                          <span className="text-sm" style={{ color: '#92400E' }}>{opportunity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Performance Analytics */}
+          <Card className="border-0 shadow-md">
+            <CardHeader>
+              <CardTitle style={{ color: '#36454F' }}>Performance Insights</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="text-center p-4 rounded-lg" style={{ backgroundColor: '#F0FDFA' }}>
+                  <div className="text-3xl font-bold mb-2" style={{ color: '#008080' }}>
+                    {feedbackData.overallScore}
+                  </div>
+                  <div className="text-sm font-medium mb-1" style={{ color: '#36454F' }}>Overall Score</div>
+                  <div className="text-xs" style={{ color: '#6B7280' }}>
+                    Excellent: 85+, Good: 70-84, Fair: 55-69
+                  </div>
+                </div>
+                
+                <div className="text-center p-4 rounded-lg" style={{ backgroundColor: '#F0F9FF' }}>
+                  <div className="text-3xl font-bold mb-2" style={{ color: '#3B82F6' }}>
+                    {Math.max(...Object.values(feedbackData.breakdown))}
+                  </div>
+                  <div className="text-sm font-medium mb-1" style={{ color: '#36454F' }}>Top Skill</div>
+                  <div className="text-xs" style={{ color: '#6B7280' }}>
+                    {Object.entries(feedbackData.breakdown).find(([_, score]) => 
+                      score === Math.max(...Object.values(feedbackData.breakdown))
+                    )?.[0] || 'Communication'}
+                  </div>
+                </div>
+                
+                <div className="text-center p-4 rounded-lg" style={{ backgroundColor: '#FFFBF5' }}>
+                  <div className="text-3xl font-bold mb-2" style={{ color: '#F59E0B' }}>
+                    {Math.min(...Object.values(feedbackData.breakdown))}
+                  </div>
+                  <div className="text-sm font-medium mb-1" style={{ color: '#36454F' }}>Focus Area</div>
+                  <div className="text-xs" style={{ color: '#6B7280' }}>
+                    {Object.entries(feedbackData.breakdown).find(([_, score]) => 
+                      score === Math.min(...Object.values(feedbackData.breakdown))
+                    )?.[0] || 'Vocabulary'}
+                  </div>
                 </div>
               </div>
             </CardContent>

@@ -1,4 +1,35 @@
 import { apiRequest } from '@/lib/api-utils'
+import { 
+  WebSocketMessage, 
+  WebSocketMessageType,
+  AIGreetingData,
+  TranscriptionData,
+  TTSChunkData,
+  AudioQualityData,
+  ErrorData
+} from '@/types/webrtc'
+
+// Additional types for realtime session
+type SessionStatus = 'connecting' | 'connected' | 'active' | 'completed' | 'error' | 'disconnected'
+
+interface OutgoingWebSocketMessage {
+  type: string
+  sessionId?: string
+  data?: unknown
+  timestamp?: string | number
+  transcript?: string | null
+  content?: string
+  [key: string]: unknown // Allow additional properties for flexibility
+}
+
+interface SessionInfo {
+  sessionId: string
+  status: 'active' | 'completed' | 'error'
+  startTime: string
+  endTime?: string
+  participants: string[]
+  metadata: Record<string, unknown>
+}
 
 export interface SessionData {
   sessionId: string
@@ -20,7 +51,7 @@ class RealTimeSessionService {
   private sessionId: string | null = null
   private onMessageCallbacks: ((message: ConversationMessage) => void)[] = []
   private onErrorCallbacks: ((error: string) => void)[] = []
-  private onStatusChangeCallbacks: ((status: string) => void)[] = []
+  private onStatusChangeCallbacks: ((status: SessionStatus) => void)[] = []
 
   /**
    * Create a new practice session with LiveKit room
@@ -108,12 +139,13 @@ class RealTimeSessionService {
   /**
    * Handle incoming WebSocket messages
    */
-  private handleWebSocketMessage(data: any) {
-    console.log('📨 Received WebSocket message:', data.type)
+  private handleWebSocketMessage(message: WebSocketMessage) {
+    console.log('📨 Received WebSocket message:', message.type)
 
-    switch (data.type) {
+    switch (message.type) {
       case 'ai_response':
-      case 'ai_greeting':
+      case 'ai_greeting': {
+        const data = message.data as AIGreetingData
         this.notifyMessage({
           type: 'ai',
           text: data.text,
@@ -121,28 +153,57 @@ class RealTimeSessionService {
           confidence: data.confidence
         })
         break
+      }
 
-      case 'tts_chunk':
+      case 'transcription': {
+        const data = message.data as TranscriptionData
+        // Handle speech-to-text result from backend
+        this.notifyMessage({
+          type: 'user',
+          text: data.text,
+          timestamp: new Date().toISOString(),
+          confidence: data.confidence
+        })
+        break
+      }
+
+      case 'tts_chunk': {
+        const data = message.data as TTSChunkData
         // Play TTS audio chunk
         this.playTTSAudio(data.data)
         break
+      }
 
       case 'session_started':
         console.log('✅ Session started successfully')
         this.notifyStatusChange('active')
         break
 
-      case 'error':
+      case 'session_joined':
+        console.log('✅ Joined session successfully')
+        this.notifyStatusChange('connected')
+        break
+
+      case 'audio_quality': {
+        const data = message.data as AudioQualityData
+        console.log('📊 Audio quality status:', data.status)
+        // Could update UI with audio quality indicator
+        break
+      }
+
+      case 'error': {
+        const data = message.data as ErrorData
         console.error('❌ Session error:', data.message)
         this.notifyError(data.message)
         break
+      }
 
       case 'pong':
         // Heartbeat response
         break
 
       default:
-        console.log('❓ Unknown message type:', data.type)
+        console.log('❓ Unknown message type:', message.type)
     }
   }
 
@@ -223,7 +284,7 @@ class RealTimeSessionService {
   /**
    * Send message via WebSocket
    */
-  private sendMessage(message: any) {
+  private sendMessage(message: OutgoingWebSocketMessage) {
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
       this.websocket.send(JSON.stringify(message))
     }
@@ -275,12 +336,12 @@ class RealTimeSessionService {
   /**
    * Get session info
    */
-  async getSessionInfo(): Promise<any> {
+  async getSessionInfo(): Promise<SessionInfo | null> {
     if (!this.sessionId) return null
 
     try {
       const response = await fetch(`http://localhost:8005/api/sessions/${this.sessionId}`)
-      return await response.json()
+      return await response.json() as SessionInfo
     } catch (error) {
       console.error('❌ Error getting session info:', error)
       return null
@@ -311,7 +372,7 @@ class RealTimeSessionService {
     this.onErrorCallbacks.push(callback)
   }
 
-  onStatusChange(callback: (status: string) => void) {
+  onStatusChange(callback: (status: SessionStatus) => void) {
     this.onStatusChangeCallbacks.push(callback)
   }
 
@@ -326,7 +387,7 @@ class RealTimeSessionService {
     this.onErrorCallbacks.forEach(callback => callback(error))
   }
 
-  private notifyStatusChange(status: string) {
+  private notifyStatusChange(status: SessionStatus) {
     this.onStatusChangeCallbacks.forEach(callback => callback(status))
   }
 

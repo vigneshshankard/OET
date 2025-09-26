@@ -143,20 +143,6 @@ export default function ScenariosPage() {
     { value: "advanced", label: "Advanced" }
   ]
 
-  const filteredScenarios = scenarios.filter(scenario => {
-    const professionMatch = scenario.profession === selectedProfession
-    const difficultyMatch = selectedDifficulty === "all" || scenario.difficulty === selectedDifficulty
-    return professionMatch && difficultyMatch
-  })
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "beginner": return "#22C55E"
-      case "intermediate": return "#FF8C00"
-      case "advanced": return "#EF4444"
-      default: return "#36454F"
-    }
-  }
 
   const getDifficultyBadgeStyle = (difficulty: string) => {
     const color = getDifficultyColor(difficulty)

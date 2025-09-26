@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react'
 import { useLocalParticipant, useMaybeRoomContext } from '@livekit/components-react'
 import { realTimeSessionService } from '@/services/realtime-session'
+import { ExtendedWindow, getCompatibleAudioContext } from '@/types/webrtc'
 
 interface RealTimeAudioProps {
   roomName: string
@@ -31,16 +32,107 @@ export default function RealTimeAudio({
   // Audio level monitoring
   const [userAudioLevel, setUserAudioLevel] = useState(0)
   const [aiAudioLevel, setAiAudioLevel] = useState(0)
+  const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'fair' | 'poor'>('good')
+  const [audioDeviceStatus, setAudioDeviceStatus] = useState<'active' | 'inactive' | 'error'>('inactive')
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null)
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
   const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const dataArrayRef = useRef<Uint8Array | null>(null)
+  const monitoringRef = useRef<boolean>(false)
+
+  // Initialize audio monitoring
+  const initializeAudioMonitoring = async () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = getCompatibleAudioContext()
+        if (!audioContextRef.current) {
+          throw new Error('AudioContext is not supported in this browser')
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      })
+
+      const source = audioContextRef.current.createMediaStreamSource(stream)
+      const analyser = audioContextRef.current.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.8
+      
+      source.connect(analyser)
+      
+      analyserRef.current = analyser
+      const arrayBuffer = new ArrayBuffer(analyser.frequencyBinCount)
+      dataArrayRef.current = new Uint8Array(arrayBuffer)
+      
+      setAudioDeviceStatus('active')
+      console.log('🎤 Audio monitoring initialized')
+      
+      return stream
+    } catch (error) {
+      console.error('❌ Failed to initialize audio monitoring:', error)
+      setAudioDeviceStatus('error')
+      throw error
+    }
+  }
+
+  // Real-time audio level monitoring
+  const monitorAudioLevels = () => {
+    if (!analyserRef.current || !monitoringRef.current) {
+      return
+    }
+
+    // Create fresh data array each time to avoid type issues
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
+    analyserRef.current.getByteFrequencyData(dataArray as any)
+    
+    // Calculate audio level (RMS)
+    let sum = 0
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i] * dataArray[i]
+    }
+    const rms = Math.sqrt(sum / dataArray.length)
+    const level = rms / 255 // Normalize to 0-1
+
+    setUserAudioLevel(level)
+
+    // Determine if user is speaking (threshold-based)
+    const speakingThreshold = 0.02
+    const currentlySpeaking = level > speakingThreshold
+    
+    if (currentlySpeaking !== isUserSpeaking) {
+      setIsUserSpeaking(currentlySpeaking)
+    }
+
+    // Monitor connection quality based on audio consistency
+    if (level > 0.1) {
+      setConnectionQuality('excellent')
+    } else if (level > 0.05) {
+      setConnectionQuality('good')
+    } else if (level > 0.01) {
+      setConnectionQuality('fair')
+    }
+
+    requestAnimationFrame(monitorAudioLevels)
+  }
 
   // Initialize audio context and check LiveKit connection
   useEffect(() => {
     if (room) {
       setConnectionState('connected')
+      setSessionStartTime(Date.now()) // Start timing the session
       console.log('✅ Connected to LiveKit room:', room.name)
+      
+      // Initialize real audio monitoring
+      initializeAudioMonitoring().then(() => {
+        monitoringRef.current = true
+        monitorAudioLevels()
+      }).catch(console.error)
       
       // Listen for participants
       room.on('participantConnected', (participant) => {
@@ -52,71 +144,91 @@ export default function RealTimeAudio({
         if (track.kind === 'audio' && participant.identity.includes('ai-patient')) {
           setIsAISpeaking(true)
           
-          // Play AI audio
+          // Monitor AI audio level using Web Audio API
           if (track instanceof MediaStreamTrack) {
             const stream = new MediaStream([track])
             const audio = new Audio()
             audio.srcObject = stream
             audio.play().catch(console.error)
             
+            // Create audio context for AI audio monitoring
+            if (audioContextRef.current) {
+              const aiSource = audioContextRef.current.createMediaStreamSource(stream)
+              const aiAnalyser = audioContextRef.current.createAnalyser()
+              aiAnalyser.fftSize = 256
+              aiSource.connect(aiAnalyser)
+              
+              let aiDataArray: Uint8Array
+              
+              const monitorAIAudio = () => {
+                if (!isAISpeaking) return
+                
+                aiDataArray = new Uint8Array(aiAnalyser.frequencyBinCount)
+                aiAnalyser.getByteFrequencyData(aiDataArray as any)
+                let sum = 0
+                for (let i = 0; i < aiDataArray.length; i++) {
+                  sum += aiDataArray[i] * aiDataArray[i]
+                }
+                const rms = Math.sqrt(sum / aiDataArray.length)
+                setAiAudioLevel(rms / 255)
+                
+                if (isAISpeaking) {
+                  requestAnimationFrame(monitorAIAudio)
+                }
+              }
+              
+              monitorAIAudio()
+            }
+            
             track.addEventListener('ended', () => {
               setIsAISpeaking(false)
+              setAiAudioLevel(0)
             })
           }
         }
       })
+
+      // Listen for data messages (transcriptions from AI service)
+      room.on('dataReceived', (payload, participant) => {
+        try {
+          const data = JSON.parse(new TextDecoder().decode(payload))
+          
+          if (data.type === 'transcription' && participant?.isLocal) {
+            // User speech transcription
+            onTranscript(data.text, false)
+          } else if (data.type === 'ai_response') {
+            // AI response text
+            onTranscript(data.text, true)
+          }
+        } catch (error) {
+          console.error('Error parsing data message:', error)
+        }
+      })
+
+      // Monitor connection quality
+      room.on('connectionQualityChanged', (quality, participant) => {
+        if (participant?.isLocal) {
+          console.log('📊 Connection quality changed:', quality)
+          setConnectionQuality(quality === 'excellent' ? 'excellent' : 
+                              quality === 'good' ? 'good' : 
+                              quality === 'poor' ? 'poor' : 'fair')
+        }
+      })
+    }
+
+    return () => {
+      monitoringRef.current = false
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close()
+      }
     }
   }, [room])
 
-  // Process audio with real-time service
-  const processAudioWithAI = async (audioBlob: Blob, transcript?: string) => {
-    try {
-      console.log('🎵 Processing audio with real-time service...')
-      
-      await realTimeSessionService.sendAudioData(audioBlob, transcript)
-      
-      // Trigger transcript callback if available
-      if (transcript) {
-        onTranscript(transcript, false)
-      }
-      
-    } catch (error) {
-      console.error('❌ Error processing audio:', error)
-    }
-  }
-
-  // Setup audio recording
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = mediaRecorder
-      chunksRef.current = []
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data)
-        }
-      }
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' })
-        processAudioWithAI(audioBlob)
-        chunksRef.current = []
-      }
-
-      mediaRecorder.start()
-      setIsUserSpeaking(true)
-    } catch (error) {
-      console.error('Error starting recording:', error)
-    }
-  }
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
-      setIsUserSpeaking(false)
-    }
+  // Handle session completion (no logging, just basic session management)
+  const handleSessionComplete = () => {
+    const duration = sessionStartTime ? Date.now() - sessionStartTime : 0
+    console.log('📊 Session completed, duration:', Math.round(duration / 1000) + 's')
+    onConversationComplete()
   }
 
   // Initialize connection and setup
@@ -143,31 +255,7 @@ export default function RealTimeAudio({
     }, 4000)
   }, [onTranscript])
 
-  // Audio level monitoring for visual feedback
-  useEffect(() => {
-    let animationFrame: number
-    
-    const monitorAudioLevels = () => {
-      // This would connect to actual audio context for real levels
-      // For now, simulate speaking detection
-      if (isUserSpeaking) {
-        setUserAudioLevel(Math.random() * 0.8 + 0.2)
-      } else {
-        setUserAudioLevel(0)
-      }
-      
-      if (isAISpeaking) {
-        setAiAudioLevel(Math.random() * 0.8 + 0.2)
-      } else {
-        setAiAudioLevel(0)
-      }
-      
-      animationFrame = requestAnimationFrame(monitorAudioLevels)
-    }
-    
-    monitorAudioLevels()
-    return () => cancelAnimationFrame(animationFrame)
-  }, [isUserSpeaking, isAISpeaking])
+  // Audio level monitoring is now handled by the real-time monitoring function above
 
   // Simulate periodic conversation exchanges for demo
   useEffect(() => {
@@ -237,9 +325,21 @@ export default function RealTimeAudio({
           {getConnectionStatusText()}
         </span>
         {connectionState === 'connected' && (
-          <span className="text-sm opacity-60" style={{ color: '#36454F' }}>
-            • AI Assistant Online
-          </span>
+          <>
+            <span className="text-sm opacity-60" style={{ color: '#36454F' }}>
+              • AI Assistant Online
+            </span>
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${
+                connectionQuality === 'excellent' ? 'bg-green-500' :
+                connectionQuality === 'good' ? 'bg-yellow-500' :
+                connectionQuality === 'fair' ? 'bg-orange-500' : 'bg-red-500'
+              }`} />
+              <span className="text-xs opacity-50" style={{ color: '#36454F' }}>
+                {connectionQuality} quality
+              </span>
+            </div>
+          </>
         )}
       </div>
 
@@ -319,13 +419,20 @@ export default function RealTimeAudio({
         </div>
       </div>
 
-      {/* Debug Info (Remove in production) */}
+      {/* Session Info & Debug Info */}
       {process.env.NODE_ENV === 'development' && (
         <div className="text-xs space-y-1 p-2 bg-gray-50 rounded opacity-60">
           <div>Room: {roomName}</div>
           <div>Participants: {room?.numParticipants || 1}</div>
-          <div>AI Participant: {connectionState === 'connected' ? 'Ready' : 'Connecting'}</div>
           <div>Connection: {connectionState}</div>
+          <div>Session Duration: {sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0}s</div>
+          <div>Audio Status: User {isUserSpeaking ? 'Speaking' : 'Silent'}, AI {isAISpeaking ? 'Speaking' : 'Silent'}</div>
+          <button 
+            onClick={handleSessionComplete}
+            className="mt-2 px-2 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700"
+          >
+            Complete Session
+          </button>
         </div>
       )}
     </div>

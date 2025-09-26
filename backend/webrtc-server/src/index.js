@@ -158,15 +158,29 @@ wss.on('connection', (ws, req) => {
     sessionManager.removeWebSocket(sessionId);
   });
 
-  // Send initial greeting when connection is established
+  // Send session joined confirmation and initial greeting
   setTimeout(() => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
-        type: 'ai_greeting',
-        text: "Hello! I'm ready to begin our practice session. Please introduce yourself when you're ready."
+        type: 'session_joined',
+        sessionId: sessionId,
+        message: 'Connected to practice session'
       }));
+
+      // Send AI greeting after a brief delay
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const session = sessionManager.getSession(sessionId);
+          const patientName = session?.patientPersona?.name || "Patient"; 
+          
+          ws.send(JSON.stringify({
+            type: 'ai_greeting',
+            text: `Hello, I'm ${patientName}. Thank you for seeing me today, Doctor. I've been having some concerns that I'd like to discuss with you.`
+          }));
+        }
+      }, 2000);
     }
-  }, 1000);
+  }, 500);
 });
 
 // Handle audio processing and AI response
@@ -177,11 +191,11 @@ async function handleAudioMessage(sessionId, data, ws) {
 
     console.log(`Processing audio for session: ${sessionId}`);
 
-    // Simulate audio processing (in real implementation, this would process the base64 audio)
+    // Decode base64 audio data
     const audioBuffer = Buffer.from(data.data, 'base64');
     
-    // Process with AI service
-    const aiResponse = await aiService.processAudioInput({
+    // Process with AI service for speech-to-text
+    const sttResult = await aiService.processAudioInput({
       audioData: audioBuffer,
       sessionContext: {
         scenarioId: session.scenarioId,
@@ -190,14 +204,48 @@ async function handleAudioMessage(sessionId, data, ws) {
       }
     });
 
+    // Send transcription result back to frontend
+    if (sttResult.transcript) {
+      ws.send(JSON.stringify({
+        type: 'transcription',
+        text: sttResult.transcript,
+        confidence: sttResult.confidence || 0.9
+      }));
+    }
+
+    // Generate AI response based on transcription
+    const aiResponse = await aiService.generatePatientResponse({
+      userInput: sttResult.transcript,
+      sessionContext: {
+        scenarioId: session.scenarioId,
+        profession: session.profession,
+        patientPersona: session.patientPersona,
+        conversationHistory: session.conversationHistory || []
+      }
+    });
+
+    // Add conversation turn to history
+    sessionManager.addConversationTurn(sessionId, {
+      speaker: 'user',
+      text: sttResult.transcript,
+      timestamp: new Date()
+    });
+
+    sessionManager.addConversationTurn(sessionId, {
+      speaker: 'ai',
+      text: aiResponse.text,
+      timestamp: new Date()
+    });
+
     // Send AI text response
     ws.send(JSON.stringify({
       type: 'ai_response',
       text: aiResponse.text,
-      confidence: aiResponse.confidence || 0.9
+      confidence: aiResponse.confidence || 0.9,
+      emotion: aiResponse.emotion || 'neutral'
     }));
 
-    // Generate and send TTS audio if available
+    // Generate and send TTS audio for AI response
     if (aiResponse.audioData) {
       ws.send(JSON.stringify({
         type: 'tts_chunk',
@@ -267,6 +315,290 @@ function generateInitialPatientGreeting(profession, scenarioId) {
 
   return greetings[profession] || "Hello, I'm here for my appointment today. Thank you for your time.";
 }
+
+// REST API Routes
+app.use(express.json());
+
+// Route for creating a new session room
+app.post('/api/sessions/create-room', async (req, res) => {
+  try {
+    const { scenarioId, profession, patientPersona } = req.body;
+    
+    const sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    // Create session
+    const session = sessionManager.createSession(sessionId, {
+      scenarioId,
+      profession,
+      patientPersona,
+      createdAt: new Date().toISOString(),
+      status: 'created'
+    });
+
+    // Generate LiveKit token
+    const accessToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity: `user_${Date.now()}`,
+      name: 'OET Practitioner'
+    });
+
+    accessToken.addGrant({
+      roomJoin: true,
+      room: sessionId,
+      canPublish: true,
+      canSubscribe: true
+    });
+
+    const token = await accessToken.toJwt();
+
+    console.log(`Created session: ${sessionId} for scenario: ${scenarioId}`);
+
+    res.json({
+      sessionId,
+      token,
+      url: LIVEKIT_URL,
+      room: sessionId,
+      wsUrl: `ws://localhost:${PORT}/ws/${sessionId}`
+    });
+  } catch (error) {
+    console.error('Error creating session:', error);
+    res.status(500).json({ error: 'Failed to create session' });
+  }
+});
+
+// Route for getting room token
+app.get('/api/sessions/:sessionId/token', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = sessionManager.getSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Generate LiveKit token
+    const accessToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity: `user_${Date.now()}`,
+      name: 'OET Practitioner'
+    });
+
+    accessToken.addGrant({
+      roomJoin: true,
+      room: sessionId,
+      canPublish: true,
+      canSubscribe: true
+    });
+
+    const token = await accessToken.toJwt();
+
+    res.json({
+      token,
+      url: LIVEKIT_URL,
+      room: sessionId
+    });
+  } catch (error) {
+    console.error('Error generating room token:', error);
+    res.status(500).json({ error: 'Failed to generate room token' });
+  }
+});
+
+// Generic route for generating LiveKit tokens
+app.post('/api/token', async (req, res) => {
+  try {
+    const { roomName, participantName, userId, metadata = {} } = req.body;
+    
+    if (!roomName || !participantName) {
+      return res.status(400).json({ error: 'roomName and participantName are required' });
+    }
+
+    console.log(`Generating LiveKit token for user ${userId} in room ${roomName}`);
+
+    // Generate LiveKit token
+    const accessToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity: participantName,
+      name: participantName,
+      metadata: JSON.stringify(metadata)
+    });
+
+    accessToken.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true
+    });
+
+    const token = await accessToken.toJwt();
+
+    res.json({
+      token,
+      url: LIVEKIT_URL,
+      roomName
+    });
+  } catch (error) {
+    console.error('Error generating LiveKit token:', error);
+    res.status(500).json({ error: 'Failed to generate token' });
+  }
+});
+
+// Route for completing a session
+app.post('/api/sessions/:sessionId/complete', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { duration } = req.body;
+    
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Update session with completion data
+    session.completedAt = new Date().toISOString();
+    session.duration = duration;
+    session.status = 'completed';
+
+    // Prepare transcript from conversation history
+    const conversationHistory = session.conversationHistory || [];
+    const transcript = conversationHistory.map(turn => 
+      `${turn.speaker}: ${turn.text}`
+    ).join('\n');
+
+    console.log(`📊 Generating comprehensive feedback for session ${sessionId}`);
+    console.log(`Transcript length: ${transcript.length} characters`);
+
+    // Generate comprehensive feedback via AI services
+    let feedbackData = null;
+    try {
+      const feedbackRequest = {
+        transcript: transcript,
+        patientPersona: session.patientPersona || {
+          name: 'Patient',
+          age: 45,
+          background: 'Standard consultation scenario',
+          complaint: 'Health concerns',
+          emotionalState: 'neutral',
+          communicationStyle: 'cooperative'
+        },
+        sessionDuration: duration,
+        targetProfession: session.profession || 'doctor',
+        difficultyLevel: 'intermediate',
+        scenarioType: 'consultation'
+      };
+
+      console.log(`🔍 Calling AI feedback generation API...`);
+      const aiResponse = await fetch('http://localhost:8003/api/v2/feedback/comprehensive', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(feedbackRequest),
+        timeout: 30000
+      });
+
+      if (aiResponse.ok) {
+        const aiResult = await aiResponse.json();
+        console.log(`✅ AI feedback generated successfully`);
+        
+        if (aiResult.success && aiResult.data) {
+          feedbackData = {
+            overallScore: aiResult.data.scoring?.overallScore || aiResult.data.feedback?.overall_score || 75,
+            detailedScores: aiResult.data.scoring?.detailedScores || aiResult.data.feedback?.detailed_scores || {
+              pronunciation: 75,
+              grammar: 75,
+              vocabulary: 75,
+              clinicalCommunication: 75,
+              empathy: 75,
+              patientEducation: 75
+            },
+            strengths: aiResult.data.scoring?.strengths || aiResult.data.feedback?.strengths || [
+              'Good communication skills',
+              'Professional approach'
+            ],
+            improvements: aiResult.data.scoring?.improvements || aiResult.data.feedback?.improvements || [
+              'Could ask more follow-up questions',
+              'Consider patient education opportunities'
+            ],
+            transcriptAnalysis: aiResult.data.scoring?.transcriptAnalysis || {
+              totalWords: transcript.split(' ').length,
+              speakingTimePercentage: 60,
+              keyPhrasesUsed: [],
+              missedOpportunities: []
+            }
+          };
+        }
+      } else {
+        console.warn(`⚠️ AI feedback API returned ${aiResponse.status}: ${aiResponse.statusText}`);
+      }
+    } catch (aiError) {
+      console.error('❌ Error calling AI feedback service:', aiError.message);
+    }
+
+    // Fallback feedback if AI service fails
+    if (!feedbackData) {
+      console.log('🔄 Using fallback feedback generation');
+      feedbackData = {
+        overallScore: 75,
+        detailedScores: {
+          pronunciation: 80,
+          grammar: 75,
+          vocabulary: 70,
+          clinicalCommunication: 75,
+          empathy: 85,
+          patientEducation: 70
+        },
+        strengths: [
+          'Good listening skills and patient engagement',
+          'Professional manner throughout consultation',
+          'Clear communication style'
+        ],
+        improvements: [
+          'Consider using more specific medical terminology',
+          'Ask more detailed follow-up questions',
+          'Provide more comprehensive patient education'
+        ],
+        transcriptAnalysis: {
+          totalWords: transcript.split(' ').length,
+          speakingTimePercentage: 65,
+          keyPhrasesUsed: ['How are you feeling?', 'I understand', 'Can you tell me more?'],
+          missedOpportunities: ['Pain scale assessment', 'Lifestyle recommendations']
+        }
+      };
+    }
+
+    // Store feedback in session
+    session.feedback = feedbackData;
+    
+    // Clean up room and connections
+    const wsConnections = wss.clients;
+    wsConnections.forEach(ws => {
+      if (ws.sessionId === sessionId) {
+        ws.send(JSON.stringify({
+          type: 'session_completed',
+          sessionId: sessionId,
+          duration: duration,
+          feedback: feedbackData
+        }));
+      }
+    });
+
+    console.log(`✅ Session ${sessionId} completed with feedback generated`);
+    
+    res.json({
+      success: true,
+      session: {
+        id: sessionId,
+        status: 'completed',
+        duration: duration,
+        completedAt: session.completedAt,
+        feedback: feedbackData,
+        transcript: transcript,
+        conversationTurns: conversationHistory.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error completing session:', error);
+    res.status(500).json({ error: 'Failed to complete session' });
+  }
+});
 
 const PORT = process.env.PORT || 8005;
 

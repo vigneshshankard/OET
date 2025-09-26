@@ -119,9 +119,9 @@ export default function ProgressPage() {
     } finally {
       setLoading(false)
     }
-  ]
+  }
 
-  const skillsProgress = [
+  const skillsProgressData = [
     {
       label: "Speaking Fluency",
       value: 78,
@@ -148,7 +148,7 @@ export default function ProgressPage() {
     }
   ]
 
-  const recentSessions = [
+  const recentSessionsData = [
     {
       id: "1",
       scenario: "Patient Consultation - Diabetes Management",
@@ -210,7 +210,7 @@ export default function ProgressPage() {
             </CardHeader>
             <CardContent className="pb-8">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-                {skillsProgress.map((skill, index) => (
+                {skillsProgressData.map((skill, index) => (
                   <div key={index} className="text-center">
                     <SimpleCircularProgress
                       percentage={skill.value}
@@ -251,7 +251,7 @@ export default function ProgressPage() {
               <div className="grid md:grid-cols-2 gap-8">
                 <SimpleProgressChart 
                   title="Skills Breakdown"
-                  data={skillsProgress}
+                  data={skillsProgressData}
                 />
                 
                 <Card className="border-0 shadow-md">
@@ -358,7 +358,7 @@ export default function ProgressPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
-                    {recentSessions.map((session) => (
+                    {recentSessionsData.map((session) => (
                       <div 
                         key={session.id} 
                         className="p-6 rounded-lg border transition-all duration-300 hover:shadow-md"

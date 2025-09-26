@@ -72,13 +72,31 @@ async def start_session(session_data: StartSessionRequest, request: Request, set
             'status': 'active'
         })
         
-        # Return session details with scenario info
+        # Create session in WebRTC server for real-time communication
+        webrtc_response = await httpx.AsyncClient().post(
+            f"{settings.webrtc_service_url}/api/sessions/create-room",
+            json={
+                "scenarioId": session_data.scenarioId,
+                "userId": user_id,
+                "profession": "doctor"  # Default for now
+            },
+            timeout=30.0
+        )
+        
+        if webrtc_response.status_code != 201:
+            raise HTTPException(status_code=500, detail="Failed to create WebRTC session")
+        
+        webrtc_data = webrtc_response.json()
+        
+        # Return session details with scenario info and WebSocket/LiveKit data
         return {
-            "sessionId": session["id"],
+            "sessionId": webrtc_data["sessionId"],
             "scenario": scenario,
             "status": "started",
-            "websocketUrl": f"ws://localhost:8000/sessions/{session['id']}/stream",  # TODO: Implement WebSocket
-            "livekitToken": "temp_token"  # TODO: Generate real LiveKit token
+            "websocketUrl": f"ws://localhost:8005{webrtc_data['websocketUrl']}",
+            "livekitToken": webrtc_data["livekitToken"],
+            "livekitUrl": webrtc_data["livekitUrl"],
+            "roomName": webrtc_data["roomName"]
         }
         
     except HTTPException:

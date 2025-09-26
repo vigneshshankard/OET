@@ -21,7 +21,7 @@ from config.settings import get_settings
 from middleware.auth import AuthMiddleware
 from middleware.rate_limiting import RateLimitMiddleware
 from middleware.logging import RequestLoggingMiddleware
-from routes import auth, users, sessions, content, billing, health, ai
+from routes import auth, users, sessions, content, billing, health, ai, livekit
 from core.exceptions import setup_exception_handlers
 from core.metrics import setup_metrics
 from core.database import initialize_database, close_database
@@ -109,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(content.router, prefix="/v1/content", tags=["content"])
     app.include_router(billing.router, prefix="/v1/billing", tags=["billing"])
     app.include_router(ai.router, prefix="/v1/ai", tags=["ai"])
+    app.include_router(livekit.router, prefix="/v1/livekit", tags=["livekit"])
     
     # Add new comprehensive session management routes
     from routes import session_management

@@ -33,10 +33,17 @@ interface RealTimeConversationProps {
       background: string
     }
   }
+  sessionData?: {
+    sessionId: string
+    websocketUrl: string
+    livekitToken: string
+    livekitUrl: string
+    roomName: string
+  }
   onComplete: (transcript: ConversationMessage[]) => void
 }
 
-export default function RealTimeConversation({ scenario, onComplete }: RealTimeConversationProps) {
+export default function RealTimeConversation({ scenario, sessionData, onComplete }: RealTimeConversationProps) {
   const { user } = useAuth()
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [currentSpeaker, setCurrentSpeaker] = useState<'user' | 'ai' | 'waiting'>('waiting')
@@ -44,7 +51,7 @@ export default function RealTimeConversation({ scenario, onComplete }: RealTimeC
   const [sessionStartTime] = useState(new Date())
   const [isProcessing, setIsProcessing] = useState(false)
   const [elapsedTime, setElapsedTime] = useState(0)
-  const [sessionData, setSessionData] = useState<SessionData | null>(null)
+  const [rtSessionData, setRtSessionData] = useState<SessionData | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'active' | 'completed' | 'error'>('connecting')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -60,6 +67,72 @@ export default function RealTimeConversation({ scenario, onComplete }: RealTimeC
     }, 1000)
     return () => clearInterval(timer)
   }, [sessionStartTime])
+
+  // Initialize WebSocket connection when sessionData is available
+  useEffect(() => {
+    if (sessionData?.websocketUrl) {
+      console.log('🔗 Initializing WebSocket connection:', sessionData.websocketUrl)
+      
+      // Connect WebSocket for real-time AI communication
+      realTimeSessionService.connectWebSocket(sessionData.websocketUrl)
+      
+      // Listen for AI messages and transcriptions
+      realTimeSessionService.onMessage((message) => {
+        const newMessage: ConversationMessage = {
+          id: Date.now().toString(),
+          speaker: message.type === 'ai' ? 'ai' : 'user',
+          text: message.text,
+          timestamp: new Date(message.timestamp),
+          confidence: message.confidence
+        }
+        
+        setMessages((prev: ConversationMessage[]) => [...prev, newMessage])
+        setCurrentSpeaker(message.type === 'ai' ? 'ai' : 'user')
+        setIsProcessing(false)
+        
+        // Auto-advance conversation phases based on message count
+        setMessages((currentMessages: ConversationMessage[]) => {
+          const messageCount = currentMessages.length
+          if (messageCount > 3 && conversationPhase === 'intro') {
+            setConversationPhase('assessment')
+          } else if (messageCount > 8 && conversationPhase === 'assessment') {
+            setConversationPhase('discussion')  
+          } else if (messageCount > 12 && conversationPhase === 'discussion') {
+            setConversationPhase('closing')
+          }
+          return currentMessages
+        })
+      })
+
+      // Listen for status changes
+      realTimeSessionService.onStatusChange((status) => {
+        // Map service status to component status
+        const mappedStatus = status === 'disconnected' ? 'error' : status
+        if (['connecting', 'connected', 'active', 'completed', 'error'].includes(mappedStatus)) {
+          setConnectionStatus(mappedStatus as 'connecting' | 'connected' | 'active' | 'completed' | 'error')
+        }
+      })
+
+      // Listen for errors
+      realTimeSessionService.onError((error) => {
+        console.error('❌ Real-time session error:', error)
+        setConnectionStatus('error')
+      })
+
+      // Set the real-time session data
+      setRtSessionData({
+        sessionId: sessionData.sessionId,
+        roomName: sessionData.roomName,
+        userToken: sessionData.livekitToken,
+        serverUrl: sessionData.livekitUrl,
+        websocketUrl: sessionData.websocketUrl
+      })
+
+      return () => {
+        realTimeSessionService.disconnect()
+      }
+    }
+  }, [sessionData])
 
   // Process AI conversation turn
   const processConversationTurn = async (userInput: string) => {
@@ -170,7 +243,12 @@ export default function RealTimeConversation({ scenario, onComplete }: RealTimeC
   }
 
   return (
-    <LiveKitProvider roomName={`practice-${scenario.id}`} userName="healthcare-professional">
+    <LiveKitProvider 
+      roomName={rtSessionData?.roomName || `practice-${scenario.id}`} 
+      userName="healthcare-professional"
+      serverUrl={rtSessionData?.serverUrl}
+      token={rtSessionData?.userToken}
+    >
       <div className="space-y-6">
       {/* Session Header */}
       <div className="flex justify-between items-center">

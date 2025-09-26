@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiRequest } from "@/lib/api-utils"
+import { PatientPersona } from "@/types"
 
 // Fetch scenarios with filters
 async function fetchScenarios(filters?: { profession?: string; difficulty?: string }) {
@@ -29,7 +30,7 @@ interface Scenario {
   id: string
   title: string
   description: string
-  patient_persona: any
+  patient_persona: PatientPersona | string
   clinical_area: string
   difficulty_level: string
   profession: string

@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import AudioRecorder from "./audio-recorder"
+import { Scenario } from "@/types"
 
 interface PracticeInterfaceProps {
-  scenario: any
+  scenario: Scenario
   onComplete: () => void
 }
 
@@ -71,7 +72,7 @@ export default function PracticeInterface({ scenario, onComplete }: PracticeInte
       {
         id: '1',
         speaker: 'system',
-        text: `Welcome to your practice session. You are about to role-play as a ${scenario.profession.toLowerCase()} with ${scenario.patientBackground.name}. The patient is here for a follow-up consultation. Begin when you're ready.`,
+        text: `Welcome to your practice session. You are about to role-play as a ${scenario.profession.toLowerCase()} with ${scenario.patient_profile.name}. The patient is here for a follow-up consultation. Remember to apply the communication skills we've practiced.`,
         timestamp: new Date()
       }
     ])
@@ -180,15 +181,15 @@ export default function PracticeInterface({ scenario, onComplete }: PracticeInte
                 <div className="space-y-2 text-sm">
                   <div>
                     <span className="font-medium" style={{ color: '#36454F' }}>Name:</span>
-                    <span className="ml-2" style={{ color: '#36454F' }}>{scenario.patientBackground.name}</span>
+                    <span className="ml-2" style={{ color: '#36454F' }}>{scenario.patient_profile.name}</span>
                   </div>
                   <div>
                     <span className="font-medium" style={{ color: '#36454F' }}>Age:</span>
-                    <span className="ml-2" style={{ color: '#36454F' }}>{scenario.patientBackground.age}</span>
+                    <span className="ml-2" style={{ color: '#36454F' }}>{scenario.patient_profile.age}</span>
                   </div>
                   <div>
                     <span className="font-medium" style={{ color: '#36454F' }}>Occupation:</span>
-                    <span className="ml-2" style={{ color: '#36454F' }}>{scenario.patientBackground.occupation}</span>
+                    <span className="ml-2" style={{ color: '#36454F' }}>{scenario.patient_profile.occupation || 'Not specified'}</span>
                   </div>
                 </div>
               </CardContent>
@@ -257,7 +258,7 @@ export default function PracticeInterface({ scenario, onComplete }: PracticeInte
                           {entry.speaker === 'user'
                             ? 'You'
                             : entry.speaker === 'ai'
-                            ? scenario.patientBackground.name
+                            ? scenario.patient_profile.name
                             : 'System'}
                         </span>
                         <span className="text-xs opacity-60">

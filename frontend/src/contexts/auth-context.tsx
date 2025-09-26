@@ -1,6 +1,27 @@
 /**
  * Authentication Context Provider
- * Manages user authentication state across the application
+ * Manages   useEffect(() => {
+    try {
+      const storedToken = localStorage.getItem('authToken')
+      const storedUser = localStorage.getItem('user')
+      
+      if (storedToken && storedUser) {
+        setToken(storedToken)
+        try {
+          setUser(JSON.parse(storedUser))
+        } catch (parseError) {
+          console.error('Error parsing stored user:', parseError)
+          clearAuthToken()
+        }
+      }
+    } catch (error) {
+      console.error('Error loading auth state:', error)
+      // Clear corrupted data
+      clearAuthToken()
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])on state across the application
  */
 "use client"
 
@@ -13,6 +34,11 @@ interface User {
   email: string
   fullName: string
   profession: string
+  role: 'admin' | 'student' | 'instructor'
+  subscriptionTier?: 'free' | 'premium' | 'professional'
+  isActive: boolean
+  createdAt: string
+  lastLoginAt?: string
 }
 
 interface AuthContextType {
@@ -29,6 +55,9 @@ interface AuthContextType {
   }) => Promise<boolean>
   logout: () => void
   error: string | null
+  isAdmin: () => boolean
+  hasRole: (role: string) => boolean
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -136,6 +165,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAuthToken()
   }
 
+  const isAdmin = (): boolean => {
+    return user?.role === 'admin'
+  }
+
+  const hasRole = (role: string): boolean => {
+    return user?.role === role
+  }
+
+  const refreshUser = async (): Promise<void> => {
+    try {
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+
+      const userData = await apiRequest<{ user: User }>('/v1/auth/me', {
+        method: 'GET'
+      })
+      
+      if (userData.user) {
+        setUser(userData.user)
+        localStorage.setItem(config.auth.userKey, JSON.stringify(userData.user))
+      }
+    } catch (error) {
+      console.error('Failed to refresh user data:', error)
+      // If refresh fails, logout user
+      logout()
+    }
+  }
+
   const value: AuthContextType = {
     user,
     token,
@@ -144,7 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     register,
     logout,
-    error
+    error,
+    isAdmin,
+    hasRole,
+    refreshUser
   }
 
   return (

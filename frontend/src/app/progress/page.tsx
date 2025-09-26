@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import StatCard from "@/components/dashboard/stat-card"
 import SimpleCircularProgress from "@/components/dashboard/simple-circular-progress"
 import SimpleProgressChart from "@/components/dashboard/simple-progress-chart"
@@ -49,8 +50,13 @@ export default function ProgressPage() {
       setLoading(true)
       setError(null)
 
-      // TODO: Get current user ID from auth context
-      const userId = 'dac83a90-1d72-47b5-ad5f-036322fa7c0e' // Using admin user for testing
+      const { user } = useAuth()
+      if (!user) {
+        setError('Please log in to view your progress')
+        return
+      }
+      
+      const userId = user.id
 
       // Fetch progress stats
       const progressStatsResponse = await apiClient.getProgressStats(userId)
